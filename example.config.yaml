@@ -4,7 +4,7 @@ admin:
 
 
 items: 10
-backend: sub.409648.xyz
+backend: api.nexconvert.com
 platform:
   Clash: clash
   ClashR: clashr
