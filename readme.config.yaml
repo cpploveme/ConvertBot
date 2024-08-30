@@ -1,0 +1,13 @@
+token: # bot token
+admin:
+- 你的id
+
+items: 10 # 一页按钮的数量 最好是偶数
+backend: # 订阅转换后端域名
+airport: # 限制订阅链接域名 只能转换以下域名的订阅
+- a.b.c
+parameter: "" # 订阅转换的参数
+rule: # 规则 格式为 "规则名称: 规则地址" 名称和地址不要包含空格
+  默认: default.ini
+platform: # 平台 格式为 "平台名称: 转换后目标类型" 平台和类型不要包含空格
+  Clash: clash

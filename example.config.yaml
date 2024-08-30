@@ -1,0 +1,30 @@
+token: 你的 Bot Token
+admin:
+- 你的id
+
+
+items: 10
+backend: sub.409648.xyz
+platform:
+  Clash: clash
+  ClashR: clashr
+  Base64: mixed
+  混合订阅: mixed
+  Surge2: surge&ver=2
+  Surge3: surge&ver=3
+  Surge3: surge&ver=4
+  Quantumult: quan
+  QuantumultX: quanx
+  Loon: loon
+  Mellow: mellow
+  SurfBoard: surfboard
+  Shadowsocks: ss
+  ShadowsocksAndroid: sssub
+  ShadowsocksR: ssr
+  ShadowsocksD: ssd
+
+# 就填一下下面这个就行 parameter是附加参数 现在这个就挺好 上面的platform你可以自己加 注意surge那个有版本区别
+parameter: "&emoji=true&list=false&tfo=false&expand=true&scv=true&fdn=false"
+rule:
+  精简: https://cdn.staticaly.com/gh/fengguowudi/ini/main/jess-sjgz.ini
+  默认: default.ini
