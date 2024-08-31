@@ -1,15 +1,14 @@
 import re
 import yaml
 import urllib
+import requests
+import signal
+import sys
 import telebot
+import time
+from urllib.parse import urlparse
 
-def load_admin() :
-    try :
-        with open('./config.yaml', 'r', encoding='utf-8') as f:
-            data = yaml.load(stream=f, Loader=yaml.FullLoader)
-        return data['admin']
-    except :
-        pass
+admin_id = []
 
 def load_token() :
     try :
@@ -18,6 +17,27 @@ def load_token() :
         return data['token']
     except :
         pass
+
+# 从 config.yaml 中读取 backend 设置
+def load_backend():
+    try:
+        with open('config.yaml', 'r', encoding='utf-8') as f:
+            config = yaml.load(f, Loader=yaml.FullLoader)
+        return config.get('backend', None)
+    except Exception as e:
+        print(f"读取配置文件出错：{e}")
+        return None
+
+setbackend = load_backend()
+
+def load_admin_id():
+    try:
+        with open('./config.yaml', 'r', encoding='utf-8') as f:
+            data = yaml.load(stream=f, Loader=yaml.FullLoader)
+        return data['admin_id']
+    except Exception as e:
+        print(f"Error loading admin ID: {e}")
+        return None
 
 def load_items() :
     try :
@@ -47,8 +67,6 @@ def get_link(message):
     temp_list = list(set(temp_list))
     return temp_list
 
-admin_id = load_admin()
-
 items_per_page = load_items()
 
 bot = telebot.TeleBot(load_token())
@@ -68,7 +86,16 @@ def auto_leave(message):
 @bot.message_handler(commands=['start'])
 def start_bot(message):
     try:
-        bot.reply_to(message, "欢迎使用订阅转换机器人\n\n发送 `/help` 获取帮助\n\n发送 `/convert <订阅链接>` 开始转换操作", parse_mode='Markdown')
+        bot.reply_to(message, 
+    "🌈 欢迎使用订阅转换机器人\n\n"
+    "✨ 发送 `/help` 获取帮助\n"
+    "✈ 发送 `/convert <订阅链接>` 开始进行订阅转换操作\n"
+    "⚙ 发送 `/backend set <后端链接>` 设置后端地址\n"
+    "😥 忘记设置的后端了？发送 `/backend list` 查看后端地址\n"
+    "🌏 查看 Web 通讯延迟？找 `/ping` 吧！\n"
+    "🔧 需要维护怎么办？`/kill` ME 💀！", 
+    parse_mode='Markdown'
+)
     except:
         bot.reply_to(message, "❌ 出现异常错误", parse_mode='Markdown')
 
@@ -78,6 +105,65 @@ def start_bot(message):
         bot.reply_to(message, "发送 `/convert <订阅链接>` 开始转换\n\n发送命令后 选择订阅链接转换后的 `平台 / 格式` 并点击按钮\n\n然后选择 `分流规则` 最后复制 `订阅链接`", parse_mode='Markdown')
     except:
         bot.reply_to(message, "❌ 出现异常错误", parse_mode='Markdown')
+
+@bot.message_handler(commands=['backend'])
+def backend_handler(message):
+    global setbackend
+    command_parts = message.text.split()
+    if len(command_parts) > 1 and command_parts[1] == 'set':
+        if len(command_parts) < 3:
+            bot.reply_to(message, "请提供一个完整的后端URL，这样我们才能更换成你的后端哦。使用格式：/backend set <http(s)://域名>")
+            return
+        new_url = command_parts[2]
+        setbackend = None  # 清除旧的后端设置
+        bot.reply_to(message, "正在检测后端中...")
+        try:
+            response = requests.get(f"{new_url}/sub?", verify=False)
+            if "Invalid target!" in response.text:
+                parsed_url = urlparse(new_url)
+                domain = parsed_url.netloc
+                setbackend = domain
+
+                # 更新 config.yaml 文件
+                with open('config.yaml', 'r', encoding='utf-8') as f:
+                    config = yaml.load(f, Loader=yaml.FullLoader)
+                config['backend'] = f"{domain}"
+                with open('config.yaml', 'w', encoding='utf-8') as f:
+                    yaml.dump(config, f, allow_unicode=True)
+                
+                bot.reply_to(message, f"域名 {domain} 似乎是一个正确的 Subconvert 后端。\n后端配置存储成功啦")
+            else:
+                bot.reply_to(message, f"呜呜呜，检测失败了，{new_url} 并不是一个有效的后端。")
+        except requests.exceptions.RequestException as e:
+            bot.reply_to(message, f"检测失败，无法访问 {new_url}。错误：{e}")
+    elif len(command_parts) > 1 and command_parts[1] == 'list':
+        if setbackend:
+            bot.reply_to(message, f"当前存储的后端域名：{setbackend}")
+        else:
+            bot.reply_to(message, "当前没有存储任何后端域名。")
+    else:
+        bot.reply_to(message, "笨蛋！这是一个分支命令！\n使用 /backend set <http(s)://域名> 设置后端\n或者 /backend list 查看已存储的后端。")
+
+@bot.message_handler(commands=['ping'])
+def ping_pong(message):
+    command_parts = message.text.split()
+    if len(command_parts) < 2:
+        url = 'https://api.telegram.org'  # 使用 Telegram API 作为默认目标
+        target = 'Telegram API'
+    else:
+        target = command_parts[1]
+        url = f'http://{target}'
+    try:
+        start_time = time.time()
+        response = requests.get(url, timeout=5, verify=False)  # 跳过 SSL 证书验证
+        end_time = time.time()
+        latency = (end_time - start_time) * 1000
+        if response.status_code == 200:
+            bot.reply_to(message, f"🏓 Ping? Pong! \n✔ 与 {target} 的延迟是：{int(latency)}ms")
+        else:
+            bot.reply_to(message, f"💣 Ping? Boom! \n❌ 与 {target}连接失败，HTTP 状态码：{response.status_code}")
+    except requests.exceptions.RequestException as e:
+        bot.reply_to(message, f"❌ 检测失败，无法 ping 通 {target}。错误：{e}")
 
 @bot.message_handler(commands=['convert'])
 def convert_sub(message):
@@ -93,17 +179,16 @@ def convert_sub(message):
             bot.reply_to(message, "您转换的内容不包含 `订阅链接` 呢 ~", parse_mode='Markdown')
             return
         try:
-            if data.get("airport", None) is not None:
-                for url in url_list:
-                    flag = False
-                    for airport in data["airport"]:
-                        if urllib.parse.urlparse(url).netloc == airport:
-                            flag = True
-                        if urllib.parse.urlparse(url).netloc == urllib.parse.urlparse(airport).netloc:
-                            flag = True
-                    if flag == False:
-                        bot.reply_to(message, f"❌ 不支持转换订阅域名 `{urllib.parse.urlparse(url).netloc}` 呢 ~", parse_mode='Markdown')
-                        return
+            for url in url_list:
+                flag = False
+                for airport in data["airport"]:
+                    if urllib.parse.urlparse(url).netloc == airport:
+                        flag = True
+                    if urllib.parse.urlparse(url).netloc == urllib.parse.urlparse(airport).netloc:
+                        flag = True
+                if flag == False:
+                    bot.reply_to(message, f"❌ 不支持转换订阅域名 `{urllib.parse.urlparse(url).netloc}` 呢 ~", parse_mode='Markdown')
+                    return
         except:
             pass
         keyboard = []
@@ -144,7 +229,8 @@ def botinit():
     global bot_name
     bot_name = '@' + bot.get_me().username
     bot.delete_my_commands(scope=None, language_code=None)
-    bot.set_my_commands(commands=[telebot.types.BotCommand("help", "帮助菜单"), telebot.types.BotCommand("convert", "订阅转换")])
+    bot.polling(none_stop=True)
+    bot.set_my_commands(commands=[telebot.types.BotCommand("start", "开始"), telebot.types.BotCommand("help", "主要命令帮助菜单"), telebot.types.BotCommand("convert", "订阅转换"), telebot.types.BotCommand("ping", "web延迟测试"), telebot.types.BotCommand("kill", "KILL ME")])
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback_inline(call):
@@ -382,11 +468,33 @@ def callback_inline(call):
         reply_markup = telebot.types.InlineKeyboardMarkup(keyboard)
         bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="❌ 出现异常错误", parse_mode='Markdown', reply_markup=reply_markup)
 
+def signal_handler(sig, frame):
+    print('正在停止 bot...')
+    bot.stop_polling()
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
+
+shutdown_flag = False
+
+@bot.message_handler(commands=['kill'])
+def killme_command(message):
+    global shutdown_flag
+    ADMIN_ID = load_admin_id()
+    if message.from_user.id == ADMIN_ID:
+        bot.reply_to(message, "💀 Bot 即将关闭...")
+        shutdown_flag = True
+        bot.stop_polling()  # 停止 polling
+        sys.exit(0)  # 正常退出程序
+    else:
+        bot.reply_to(message, "❌ 你没有权限执行这个命令。")
+
 if __name__ == '__main__':
     print('[程序已启动]')
-    botinit()
-    while True:
+    while not shutdown_flag:
         try:
             bot.polling(none_stop=True)
         except Exception as e:
-            pass
+            print(f"发生异常: {e}")
+            time.sleep(5)  # 出现异常后等待 5 秒后重启轮询
